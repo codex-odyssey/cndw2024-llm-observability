@@ -1,0 +1,36 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+  otlphttp/traceloop:
+    endpoint: "https://api.traceloop.com"
+    headers:
+      Authorization: "Bearer d712c56c651b2017322cf2786feb569815501653e34672cac766a52a49e716322f1696ff90bccdac003b34e063cc5524"
+  debug:
+    verbosity: detailed
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+service:
+  pipelines:
+    traces:
+      receivers: 
+        - otlp
+      processors:
+        - batch
+      exporters:
+        - otlp/tempo
+        - otlphttp/traceloop
+        - debug
