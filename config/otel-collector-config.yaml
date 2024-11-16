@@ -17,7 +17,7 @@ exporters:
   otlphttp/traceloop:
     endpoint: "https://api.traceloop.com"
     headers:
-      Authorization: "Bearer d712c56c651b2017322cf2786feb569815501653e34672cac766a52a49e716322f1696ff90bccdac003b34e063cc5524"
+      Authorization: "Bearer <your-traceloop-apikey>"
   debug:
     verbosity: detailed
     sampling_initial: 5
