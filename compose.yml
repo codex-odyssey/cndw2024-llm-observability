@@ -4,6 +4,29 @@ x-default-policy: &default_policy
     - cndw2024
 
 services:
+  app:
+    <<: *default_policy
+    container_name: app
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    ports:
+      - 8501:8501
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      COHERE_API_KEY: ${COHERE_API_KEY}
+      TRACELOOP_BASE_URL: http://otel-collector:4318
+    volumes:
+      - ./data/cndw2024_accepted_sessions.csv:/app/data/cndw2024_accepted_sessions.csv
+    develop:
+      watch:
+        - action: sync
+          path: ./app/
+          target: /app
+        - action: rebuild
+          path: ./app/
+    depends_on:
+      - otel-collector
   # Tempo runs as user 10001, and docker compose creates the volume as root.
   # As such, we need to chown the volume in order for Tempo to start correctly.
   init:
@@ -15,7 +38,6 @@ services:
       - "/var/tempo"
     volumes:
       - tempo-data:/var/tempo
-
   memcached:
     <<: *default_policy
     image: memcached:1.6.29
@@ -25,7 +47,6 @@ services:
     environment:
       - MEMCACHED_MAX_MEMORY=64m # Set the maximum memory usage
       - MEMCACHED_THREADS=4 # Number of threads to use
-
   tempo:
     <<: *default_policy
     image: *tempoImage
@@ -39,7 +60,6 @@ services:
     depends_on:
       - init
       - memcached
-  
   # for otel-collector pipeline debug
   # k6-tracing:
   #   <<: *default_policy
@@ -50,7 +70,6 @@ services:
   #   restart: always
   #   depends_on:
   #     - otel-collector
-
   otel-collector:
     <<: *default_policy
     image: otel/opentelemetry-collector-contrib
@@ -78,7 +97,6 @@ services:
       - ./config/prometheus.yaml:/etc/prometheus.yaml
     ports:
       - "9090:9090"
-
   grafana:
     <<: *default_policy
     image: grafana/grafana:11.2.0
