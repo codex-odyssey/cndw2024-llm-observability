@@ -4,6 +4,7 @@ import vector_store as vs
 import streamlit as st
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.prompts import PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain.retrievers.contextual_compression import ContextualCompressionRetriever
 from langchain_openai.chat_models import ChatOpenAI
@@ -80,6 +81,28 @@ with st.sidebar.container():
             help="Rerankerで取得した情報を何件に絞り込むか",
         )
 
+word_generation_prompt = """
+あなたはクラウドネイティブな単語に詳しい有能なアシストです。
+下記の質問に関連するクラウドネイティブな単語を3つ教えてください。
+また、単語はカンマで区切って出力してください。
+
+質問:{question}
+"""
+
+answer_generation_prompt = """
+以下のセッション情報に基づいて、質問に答えてください。
+質問には関連する単語も考慮して回答できます。
+
+## セッション情報
+{context}
+
+## 質問
+{question}
+
+## 質問に関連する単語
+{related_words}
+"""
+
 vector_store = vs.initialize(model_name=model_name)
 retriever = vector_store.as_retriever(search_kwargs={"k": top_k})
 
@@ -110,19 +133,17 @@ if use_reranker == True:
         base_compressor=compressor, base_retriever=retriever
     )
 
-prompt = """
-以下の質問をコンテキストに基づいて、答えてください。
+related_word_generation_chain = (
+    PromptTemplate.from_template(word_generation_prompt)
+    | chat_model
+    |(lambda x: x.content)
+)
 
-## コンテキスト
-{context}
-
-## 質問
-{question}
-"""
+from langchain_core.output_parsers import StrOutputParser
 
 chain = (
-    {"question": RunnablePassthrough(), "context": retriever}
-    | PromptTemplate.from_template(prompt)
+    {"question": RunnablePassthrough(), "related_words": related_word_generation_chain,"context": related_word_generation_chain | retriever}
+    | PromptTemplate.from_template(answer_generation_prompt)
     | chat_model
     | StrOutputParser()
 )
@@ -143,7 +164,8 @@ if prompt := st.chat_input("何が聞きたいですか？"):
             {"role": message["role"], "content": message["content"]}
             for message in st.session_state.messages
         ]
-        st.session_state["run_id"] = run_id = str(uuid.uuid4())
-        stream = chain.stream(input=prompt, config={"run_id": run_id})
+        if "run_id" not in st.session_state:
+            st.session_state["run_id"] = str(uuid.uuid4())
+        stream = chain.stream(input=prompt, config={"run_id": st.session_state["run_id"]})
         response = st.write_stream(stream=stream)
     st.session_state.messages.append({"role": "assistant", "content": response})
