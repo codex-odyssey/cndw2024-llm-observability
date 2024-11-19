@@ -4,6 +4,7 @@ import vector_store as vs
 import streamlit as st
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.prompts import PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain.retrievers.contextual_compression import ContextualCompressionRetriever
 from langchain_openai.chat_models import ChatOpenAI
@@ -80,65 +81,76 @@ with st.sidebar.container():
             help="Rerankerで取得した情報を何件に絞り込むか",
         )
 
+word_generation_prompt = """
+あなたはクラウドネイティブな単語に詳しい有能なアシストです。
+下記の質問に関連するクラウドネイティブな単語を3つ教えてください。
+また、単語はカンマで区切って出力してください。
 
-def generate_response(query: str):
-    """Generate LLM response via streaming output."""
-    if model_name == "gpt-4o-mini":
-        chat_model = ChatOpenAI(
-            api_key=openai_api_key,
-            model=model_name,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-    elif model_name == "command-r-plus":
-        chat_model = ChatCohere(
-            cohere_api_key=cohere_api_key,
-            model=model_name,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-    else:
-        logger.error("Unsetted model name")
+質問:{question}
+"""
 
-    # 軽微な処理なので、アプリケーションの実行ごとに初期化する
-    vector_store = vs.initialize(model_name=model_name)
-    retriever = vector_store.as_retriever(search_kwargs={"k": top_k})
+answer_generation_prompt = """
+以下のセッション情報に基づいて、質問に答えてください。
+質問には関連する単語も考慮して回答できます。
 
-    # Rerankerの使用フラグが有効（デフォルト）の場合は、CohereのRerankerを用いて、
-    # 取得した情報を関連度順に並び替えた後に、指定件数分のみ採用する
-    if use_reranker == True:
-        compressor = CohereRerank(
-            cohere_api_key=cohere_api_key, model="rerank-multilingual-v3.0", top_n=top_n
-        )
-        retriever = ContextualCompressionRetriever(
-            base_compressor=compressor, base_retriever=retriever
-        )
+## セッション情報
+{context}
 
-    prompt = """
-    以下の質問をコンテキストに基づいて、答えてください。
+## 質問
+{question}
 
-    ## コンテキスト
-    {context}
+## 質問に関連する単語
+{related_words}
+"""
 
-    ## 質問
-    {question}
-    """
+vector_store = vs.initialize(model_name=model_name)
+retriever = vector_store.as_retriever(search_kwargs={"k": top_k})
 
-    chain = (
-        {"question": RunnablePassthrough(), "context": retriever}
-        | PromptTemplate.from_template(prompt)
-        | chat_model
-        | StrOutputParser()
+if model_name == "gpt-4o-mini":
+    chat_model = ChatOpenAI(
+        api_key=openai_api_key,
+        model=model_name,
+        temperature=temperature,
+        max_tokens=max_tokens,
     )
-    st.session_state["run_id"] = str(uuid.uuid4())
-    run_id = st.session_state["run_id"]
-    response = chain.stream(input=query, config={"run_id": run_id})
-    for chunk in response:
-        yield chunk
+elif model_name == "command-r-plus":
+    chat_model = ChatCohere(
+        cohere_api_key=cohere_api_key,
+        model=model_name,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+else:
+    logger.error("Unsetted model name")
 
+# Rerankerの使用フラグが有効（デフォルト）の場合は、CohereのRerankerを用いて、
+# 取得した情報を関連度順に並び替えた後に、指定件数分のみ採用する
+if use_reranker == True:
+    compressor = CohereRerank(
+        cohere_api_key=cohere_api_key, model="rerank-multilingual-v3.0", top_n=top_n
+    )
+    retriever = ContextualCompressionRetriever(
+        base_compressor=compressor, base_retriever=retriever
+    )
+
+related_word_generation_chain = (
+    PromptTemplate.from_template(word_generation_prompt)
+    | chat_model
+    |(lambda x: x.content)
+)
+
+from langchain_core.output_parsers import StrOutputParser
+
+chain = (
+    {"question": RunnablePassthrough(), "related_words": related_word_generation_chain,"context": related_word_generation_chain | retriever}
+    | PromptTemplate.from_template(answer_generation_prompt)
+    | chat_model
+    | StrOutputParser()
+)
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
+
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
@@ -152,6 +164,8 @@ if prompt := st.chat_input("何が聞きたいですか？"):
             {"role": message["role"], "content": message["content"]}
             for message in st.session_state.messages
         ]
-        stream = generate_response(query=prompt)
+        if "run_id" not in st.session_state:
+            st.session_state["run_id"] = str(uuid.uuid4())
+        stream = chain.stream(input=prompt, config={"run_id": st.session_state["run_id"]})
         response = st.write_stream(stream=stream)
     st.session_state.messages.append({"role": "assistant", "content": response})
