@@ -80,65 +80,56 @@ with st.sidebar.container():
             help="Rerankerで取得した情報を何件に絞り込むか",
         )
 
+vector_store = vs.initialize(model_name=model_name)
+retriever = vector_store.as_retriever(search_kwargs={"k": top_k})
 
-def generate_response(query: str):
-    """Generate LLM response via streaming output."""
-    if model_name == "gpt-4o-mini":
-        chat_model = ChatOpenAI(
-            api_key=openai_api_key,
-            model=model_name,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-    elif model_name == "command-r-plus":
-        chat_model = ChatCohere(
-            cohere_api_key=cohere_api_key,
-            model=model_name,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-    else:
-        logger.error("Unsetted model name")
-
-    # 軽微な処理なので、アプリケーションの実行ごとに初期化する
-    vector_store = vs.initialize(model_name=model_name)
-    retriever = vector_store.as_retriever(search_kwargs={"k": top_k})
-
-    # Rerankerの使用フラグが有効（デフォルト）の場合は、CohereのRerankerを用いて、
-    # 取得した情報を関連度順に並び替えた後に、指定件数分のみ採用する
-    if use_reranker == True:
-        compressor = CohereRerank(
-            cohere_api_key=cohere_api_key, model="rerank-multilingual-v3.0", top_n=top_n
-        )
-        retriever = ContextualCompressionRetriever(
-            base_compressor=compressor, base_retriever=retriever
-        )
-
-    prompt = """
-    以下の質問をコンテキストに基づいて、答えてください。
-
-    ## コンテキスト
-    {context}
-
-    ## 質問
-    {question}
-    """
-
-    chain = (
-        {"question": RunnablePassthrough(), "context": retriever}
-        | PromptTemplate.from_template(prompt)
-        | chat_model
-        | StrOutputParser()
+if model_name == "gpt-4o-mini":
+    chat_model = ChatOpenAI(
+        api_key=openai_api_key,
+        model=model_name,
+        temperature=temperature,
+        max_tokens=max_tokens,
     )
-    st.session_state["run_id"] = str(uuid.uuid4())
-    run_id = st.session_state["run_id"]
-    response = chain.stream(input=query, config={"run_id": run_id})
-    for chunk in response:
-        yield chunk
+elif model_name == "command-r-plus":
+    chat_model = ChatCohere(
+        cohere_api_key=cohere_api_key,
+        model=model_name,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+else:
+    logger.error("Unsetted model name")
 
+# Rerankerの使用フラグが有効（デフォルト）の場合は、CohereのRerankerを用いて、
+# 取得した情報を関連度順に並び替えた後に、指定件数分のみ採用する
+if use_reranker == True:
+    compressor = CohereRerank(
+        cohere_api_key=cohere_api_key, model="rerank-multilingual-v3.0", top_n=top_n
+    )
+    retriever = ContextualCompressionRetriever(
+        base_compressor=compressor, base_retriever=retriever
+    )
+
+prompt = """
+以下の質問をコンテキストに基づいて、答えてください。
+
+## コンテキスト
+{context}
+
+## 質問
+{question}
+"""
+
+chain = (
+    {"question": RunnablePassthrough(), "context": retriever}
+    | PromptTemplate.from_template(prompt)
+    | chat_model
+    | StrOutputParser()
+)
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
+
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
@@ -152,6 +143,7 @@ if prompt := st.chat_input("何が聞きたいですか？"):
             {"role": message["role"], "content": message["content"]}
             for message in st.session_state.messages
         ]
-        stream = generate_response(query=prompt)
+        st.session_state["run_id"] = run_id = str(uuid.uuid4())
+        stream = chain.stream(input=prompt, config={"run_id": run_id})
         response = st.write_stream(stream=stream)
     st.session_state.messages.append({"role": "assistant", "content": response})
