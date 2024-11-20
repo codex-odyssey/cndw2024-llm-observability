@@ -4,7 +4,6 @@ import vector_store as vs
 import streamlit as st
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.prompts import PromptTemplate
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain.retrievers.contextual_compression import ContextualCompressionRetriever
 from langchain_openai.chat_models import ChatOpenAI
