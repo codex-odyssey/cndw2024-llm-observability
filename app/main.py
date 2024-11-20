@@ -1,5 +1,6 @@
 import os, uuid, logging
 import vector_store as vs
+from agent.agent import Agent
 
 import streamlit as st
 from langchain_core.runnables import RunnablePassthrough
@@ -11,6 +12,7 @@ from langchain_cohere.chat_models import ChatCohere
 from langchain_cohere.rerank import CohereRerank
 
 from traceloop.sdk import Traceloop
+
 
 logger = logging.getLogger(name=__name__)
 Traceloop.init(
@@ -80,35 +82,10 @@ with st.sidebar.container():
             help="Rerankerで取得した情報を何件に絞り込むか",
         )
 
-word_generation_prompt = """
-あなたはクラウドネイティブな単語に詳しい有能なアシストです。
-下記の質問に関連するクラウドネイティブな単語を3つ教えてください。
-また、単語はカンマで区切って出力してください。
-
-質問:{question}
-"""
-
-answer_generation_prompt = """
-以下のセッション情報に基づいて、質問に答えてください。
-質問には関連する単語も考慮して回答できます。
-
-## セッション情報
-{context}
-
-## 質問
-{question}
-
-## 質問に関連する単語
-{related_words}
-"""
-
-vector_store = vs.initialize(model_name=model_name)
-retriever = vector_store.as_retriever(search_kwargs={"k": top_k})
-
 if model_name == "gpt-4o-mini":
     chat_model = ChatOpenAI(
         api_key=openai_api_key,
-        model=model_name,
+        model="gpt-4o",
         temperature=temperature,
         max_tokens=max_tokens,
     )
@@ -122,32 +99,7 @@ elif model_name == "command-r-plus":
 else:
     logger.error("Unsetted model name")
 
-# Rerankerの使用フラグが有効（デフォルト）の場合は、CohereのRerankerを用いて、
-# 取得した情報を関連度順に並び替えた後に、指定件数分のみ採用する
-if use_reranker == True:
-    compressor = CohereRerank(
-        cohere_api_key=cohere_api_key, model="rerank-multilingual-v3.0", top_n=top_n
-    )
-    retriever = ContextualCompressionRetriever(
-        base_compressor=compressor, base_retriever=retriever
-    )
-
 from operator import itemgetter
-
-chain = (
-    {
-        "question": RunnablePassthrough(),
-        "related_words": (
-            PromptTemplate.from_template(word_generation_prompt)
-            | chat_model
-            | StrOutputParser()
-        ),
-    }
-    | RunnablePassthrough().assign(context=itemgetter("related_words")| retriever)
-    | PromptTemplate.from_template(answer_generation_prompt)
-    | chat_model
-    | StrOutputParser()
-)
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -160,6 +112,7 @@ if prompt := st.chat_input("何が聞きたいですか？"):
     with st.chat_message("user"):
         st.markdown(prompt)
     st.session_state.messages.append({"role": "user", "content": prompt})
+    agent = Agent(llm=chat_model)
     with st.chat_message("assistant"):
         messages = [
             {"role": message["role"], "content": message["content"]}
@@ -167,6 +120,10 @@ if prompt := st.chat_input("何が聞きたいですか？"):
         ]
         if "run_id" not in st.session_state:
             st.session_state["run_id"] = str(uuid.uuid4())
-        stream = chain.stream(input=prompt, config={"run_id": st.session_state["run_id"]})
-        response = st.write_stream(stream=stream)
-    st.session_state.messages.append({"role": "assistant", "content": response})
+        #stream = chain.stream(input=prompt, config={"run_id": st.session_state["run_id"]})
+        result = agent.run(question=prompt)
+        logger.warning(result)
+        #response = st.write_stream(stream=stream)
+        st.markdown(result.content)
+        logger.warning(st.session_state.messages)
+    st.session_state.messages.append({"role": "assistant", "content": result.content})
