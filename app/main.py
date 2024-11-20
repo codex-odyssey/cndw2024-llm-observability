@@ -4,7 +4,6 @@ import vector_store as vs
 import streamlit as st
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.prompts import PromptTemplate
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain.retrievers.contextual_compression import ContextualCompressionRetriever
 from langchain_openai.chat_models import ChatOpenAI
@@ -133,16 +132,18 @@ if use_reranker == True:
         base_compressor=compressor, base_retriever=retriever
     )
 
-related_word_generation_chain = (
-    PromptTemplate.from_template(word_generation_prompt)
-    | chat_model
-    |(lambda x: x.content)
-)
-
-from langchain_core.output_parsers import StrOutputParser
+from operator import itemgetter
 
 chain = (
-    {"question": RunnablePassthrough(), "related_words": related_word_generation_chain,"context": related_word_generation_chain | retriever}
+    {
+        "question": RunnablePassthrough(),
+        "related_words": (
+            PromptTemplate.from_template(word_generation_prompt)
+            | chat_model
+            | StrOutputParser()
+        ),
+    }
+    | RunnablePassthrough().assign(context=itemgetter("related_words")| retriever)
     | PromptTemplate.from_template(answer_generation_prompt)
     | chat_model
     | StrOutputParser()
