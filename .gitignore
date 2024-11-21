@@ -1,3 +1,4 @@
 .env
+__pycache__
 data/cndw2024_all_all.csv
 venv

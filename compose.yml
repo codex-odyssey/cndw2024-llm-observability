@@ -38,6 +38,8 @@ services:
       - "/var/tempo"
     volumes:
       - tempo-data:/var/tempo
+    networks:
+      - cndw2024
   memcached:
     <<: *default_policy
     image: memcached:1.6.29
@@ -83,8 +85,6 @@ services:
       - 4318:4318 # OTLP http receiver
     environment:
       TRACELOOP_API_KEY: ${TRACELOOP_API_KEY}
-    depends_on:
-      - tempo
 
   prometheus:
     <<: *default_policy
@@ -110,6 +110,7 @@ services:
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
       - GF_AUTH_DISABLE_LOGIN_FORM=true
       - GF_FEATURE_TOGGLES_ENABLE=traceqlEditor metricsSummary
+      - GF_INSTALL_PLUGINS=https://storage.googleapis.com/integration-artifacts/grafana-exploretraces-app/grafana-exploretraces-app-latest.zip;grafana-traces-app
     ports:
       - "3000:3000"
 
