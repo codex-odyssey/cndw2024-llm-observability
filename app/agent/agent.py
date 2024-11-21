@@ -76,7 +76,7 @@ class Respondent:
         (
           "human",
           f"セッション情報に基づいて、質問に答えてください。\n\n"
-          "質問に関連する単語に記載があれば、その単語も質問に関連性があるものとして、回答できます。\n\n"
+          "「質問に関連する単語」を考慮しても良いですが、その場合は「直接関連するセッションはありませんでしたが、関連しそうなセッションを検索してみました。」と回答に一文入れてください。\n\n"
           "## セッション情報\n\n"
           "{context}\n\n"
           "## 質問\n\n"
@@ -103,7 +103,7 @@ class KeywordGenerator:
         (
           "human",
           f"下記の質問に関連するCloud Nativeな分野の単語を{k}個教えてください。\n\n"
-          "また、単語はカンマで区切って出力してください。\n\n"
+          "また、2単語以上の場合、単語はカンマで区切って出力してください。\n\n"
           "質問:{question}",
         ),
       ]
@@ -118,7 +118,6 @@ class State(BaseModel):
     )
     keywords: str = Field(default="", description="questionに関連するキーワード")
     result: str = Field(default="", description="回答")
-    k: int = Field(default=2, description="keyword_generatorで生成するキーワードの数")
     iteration: int = Field(default=0, description="反復回数")
     is_information_sufficient: bool = Field(
         default=False, description="情報が十分かどうか"
@@ -163,7 +162,7 @@ class Agent:
         return workflow.compile()
 
     def _keyword_generator(self, state: State) -> dict[str, Any]:
-        keywords: AIMessage = self.keyword_generator.run(state.question, state.k + state.iteration)
+        keywords: AIMessage = self.keyword_generator.run(state.question, state.iteration)
         return {
             "keywords": keywords.content,
         }

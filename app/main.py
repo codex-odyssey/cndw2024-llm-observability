@@ -1,15 +1,9 @@
 import os, uuid, logging
-import vector_store as vs
 from agent.agent import Agent
 
 import streamlit as st
-from langchain_core.runnables import RunnablePassthrough
-from langchain_core.prompts import PromptTemplate
-from langchain_core.output_parsers import StrOutputParser
-from langchain.retrievers.contextual_compression import ContextualCompressionRetriever
 from langchain_openai.chat_models import ChatOpenAI
 from langchain_cohere.chat_models import ChatCohere
-from langchain_cohere.rerank import CohereRerank
 
 from traceloop.sdk import Traceloop
 
@@ -85,7 +79,7 @@ with st.sidebar.container():
 if model_name == "gpt-4o-mini":
     chat_model = ChatOpenAI(
         api_key=openai_api_key,
-        model="gpt-4o",
+        model=model_name,
         temperature=temperature,
         max_tokens=max_tokens,
     )
@@ -98,8 +92,6 @@ elif model_name == "command-r-plus":
     )
 else:
     logger.error("Unsetted model name")
-
-from operator import itemgetter
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
