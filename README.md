@@ -20,6 +20,6 @@ docker compose up -d
 テストデータの生成
 
 ```
-TRACELOOP_BASE_URL: http://localhost:4318
+export TRACELOOP_BASE_URL=http://localhost:4318
 python3 app/generate_data.py
 ```
