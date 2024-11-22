@@ -1,18 +1,13 @@
 
 from langchain_openai.chat_models import ChatOpenAI
-from typing import Annotated, Any, Optional
-import operator
-from typing import Annotated, Any, Optional
-
-from langchain_core.prompts import PromptTemplate
 
 from langchain_core.messages import AIMessage
 from dotenv import load_dotenv
-from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph
 from pydantic import BaseModel, Field
+from typing import Any
 import vector_store as vs
 
 # セッションを表すデータモデル
@@ -102,8 +97,9 @@ class KeywordGenerator:
         ),
         (
           "human",
-          f"下記の質問に関連するCloud Nativeな分野の単語を{k}個教えてください。\n\n"
-          "また、2単語以上の場合、単語はカンマで区切って出力してください。\n\n"
+          f"下記の質問に関連するCloud Nativeの分野の単語を{k}個だけ教えてください。\n\n"
+          "また、解答は単語のみをCSV形式で出力してください。\n\n"
+          "たとえば、質問が「Go言語」であれば「kubernetes」と回答してください。\n\n"
           "質問:{question}",
         ),
       ]
