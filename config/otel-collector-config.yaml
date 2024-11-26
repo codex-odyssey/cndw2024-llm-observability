@@ -6,6 +6,13 @@ receivers:
       http:
         endpoint: 0.0.0.0:4318
 
+extensions:
+  headers_setter:
+    headers:
+      - action: upsert
+        key: X-Scope-OrgID
+        value: tenant1
+
 processors:
   batch:
 
@@ -24,6 +31,12 @@ exporters:
     sampling_thereafter: 200
   prometheus:
     endpoint: "0.0.0.0:8889"
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+    tls:
+      insecure: true
+    headers:
+      "X-Scope-OrgID": "tenant1"
 
 service:
   pipelines:
@@ -35,9 +48,15 @@ service:
       exporters:
         - otlp/tempo
         - otlphttp/traceloop
-        - debug
+        #- debug
     metrics:
       receivers:
         - otlp
       exporters:
         - prometheus
+    logs:
+      receivers:
+        - otlp
+      exporters:
+        - otlphttp/loki
+        - debug
