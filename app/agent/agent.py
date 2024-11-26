@@ -57,7 +57,7 @@ class SessionRetriever:
     chain = { "sessions" : self.retriever} | prompt | self.llm
     return chain.invoke(words)
 
-class Respondent:
+class Responder:
   def __init__(self, llm: ChatOpenAI):
     self.llm = llm
 
@@ -98,8 +98,7 @@ class KeywordGenerator:
         (
           "human",
           f"下記の質問に関連するCloud Nativeの分野の単語を{k}個だけ教えてください。\n\n"
-          "また、解答は単語のみをCSV形式で出力してください。\n\n"
-          "たとえば、質問が「Go言語」であれば「kubernetes」と回答してください。\n\n"
+          "また、解答は必ず単語のみを出力し、CSV形式で出力してください。\n\n"
           "質問:{question}",
         ),
       ]
@@ -123,7 +122,7 @@ class Agent:
     def __init__(self, llm: ChatOpenAI):
         # 各種ジェネレータの初期化
         self.keyword_generator = KeywordGenerator(llm=llm)
-        self.respondent = Respondent(llm=llm)
+        self.responder = Responder(llm=llm)
         self.session_retriever = SessionRetriever(llm=llm)
 
         # グラフの作成
@@ -135,7 +134,7 @@ class Agent:
 
         # 各ノードの追加
         workflow.add_node("keyword_generator", self._keyword_generator)
-        workflow.add_node("respondent", self._respondent)
+        workflow.add_node("responder", self._responder)
         workflow.add_node("session_retriever", self._session_retriever)
         workflow.add_node("evaluate_information", self._evaluate_information)
 
@@ -150,9 +149,9 @@ class Agent:
         workflow.add_conditional_edges(
             "evaluate_information",
             lambda state: state.is_information_sufficient or state.iteration > 3,
-            {True: "respondent", False: "keyword_generator"},
+            {True: "responder", False: "keyword_generator"},
         )
-        workflow.add_edge("respondent", END)
+        workflow.add_edge("responder", END)
 
         # グラフのコンパイル
         return workflow.compile()
@@ -163,8 +162,8 @@ class Agent:
             "keywords": keywords.content,
         }
 
-    def _respondent(self, state: State) ->  dict[str, Any]:
-        result: str = self.respondent.run(
+    def _responder(self, state: State) ->  dict[str, Any]:
+        result: str = self.responder.run(
             str(state.sessions), state.keywords, state.question,
         )
         return {"result": result}
