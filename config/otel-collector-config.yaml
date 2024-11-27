@@ -48,15 +48,18 @@ service:
       exporters:
         - otlp/tempo
         - otlphttp/traceloop
-        #- debug
+        - debug
     metrics:
       receivers:
         - otlp
       exporters:
         - prometheus
+        - otlphttp/traceloop
     logs:
       receivers:
         - otlp
+      processors:
+        - batch
       exporters:
         - otlphttp/loki
         - debug
